@@ -7,7 +7,7 @@ import {
     ISuperchainWETH,
     ICrossL2Inbox,
     Identifier
-} from "./interfaces.sol";
+} from "./Interfaces.sol";
 
 error MessageHashNotRelayed();
 
@@ -37,6 +37,40 @@ library SuperchainLibrary {
     ///         If this is not a cross L2 message being relayed, it will return address(0) and 0 respectively.
     function msgSenderAndSource() internal view returns (address msgSender_, uint256 source_) {
         (msgSender_, source_) = IL2ToL2CrossDomainMessenger(L2_TO_L2_CROSS_DOMAIN_MESSENGER).crossDomainContext();
+    }
+
+    /// @notice Send an ERC20 token across the superchain.
+    /// @param _token The address of the ERC20 token to send.
+    /// @param _to The address of the receiver of the ERC20 token on the destination chain.
+    /// @param _amount The amount of the ERC20 token to send.
+    /// @param _chainId The chain id of the destination chain.
+    /// @return msgHash_ The unique hash used to identify the message in the L2ToL2CrossDomainMessenger.
+    function crossSendERC20(address _token, address _to, uint256 _amount, uint256 _chainId)
+        internal
+        returns (bytes32 msgHash_)
+    {
+        return ISuperchainTokenBridge(SUPERCHAIN_TOKEN_BRIDGE).sendERC20(_token, _to, _amount, _chainId);
+    }
+
+    /// @notice Send ETH across the superchain.
+    /// @param _to The address of the receiver of the ETH token on the destination chain.
+    /// @param _amount The amount of the ETH token to send.
+    /// @param _chainId The chain id of the destination chain.
+    /// @return msgHash_ The unique hash used to identify the message in the L2ToL2CrossDomainMessenger.
+    function crossSendETH(address _to, uint256 _amount, uint256 _chainId) internal returns (bytes32 msgHash_) {
+        return ISuperchainWETH(SUPERCHAIN_WETH).sendETH{value: _amount}(_to, _chainId);
+    }
+
+    /// @notice Send a message across the superchain.
+    /// @param _chainId The chain id of the destination chain.
+    /// @param _target The address of the receiver of the message on the destination chain.
+    /// @param _message The message to send.
+    /// @return msgHash_ The unique hash used to identify the message in the L2ToL2CrossDomainMessenger.
+    function crossSendMessage(uint256 _chainId, address _target, bytes memory _message)
+        internal
+        returns (bytes32 msgHash_)
+    {
+        return IL2ToL2CrossDomainMessenger(L2_TO_L2_CROSS_DOMAIN_MESSENGER).sendMessage(_chainId, _target, _message);
     }
 
     /// @notice Verifies that `_from` bridged `_amount` amount of `_token` to `_to` from `_source` chain to this chain and it was relayed via the L2ToL2CrossDomainMessenger with nonce `_nonce`.
@@ -121,7 +155,8 @@ library SuperchainLibrary {
             )
         );
 
-        // This can be replayed, so it is advised to also keep a local track of successful messages or nonces that has been consumed.
+        // This can be replayed, so it is advised to also keep a local track of successful messages or nonces that has been consumed,
+        // and revert if the same hash is used more than once.
         if (!IL2ToL2CrossDomainMessenger(L2_TO_L2_CROSS_DOMAIN_MESSENGER).successfulMessages(hash_)) {
             revert MessageHashNotRelayed();
         }
